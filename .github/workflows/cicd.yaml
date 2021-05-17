@@ -1,0 +1,53 @@
+name: CICD
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - v*
+jobs:
+  job:
+    name: Build and Release
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - uses: actions/setup-python@v2
+      with:
+        python-version: 3.6
+
+    - name: Update pip
+      run: |
+        pip install -U wheel
+        pip install -U setuptools
+        python -m pip install -U pip
+
+    - name: Build
+      run: |
+        make build
+        cp ./dist/pyflicka*.tar.gz pyflicka.tar.gz
+
+    - name: Make release body
+      run: |
+        git log --pretty=format:"%h - (%an) %s %n%b" --no-merges $(git describe --tags --abbrev=0)..HEAD >> release.txt
+
+    - name: Create Release
+      id: create_release
+      uses: actions/create-release@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        tag_name: ${{ github.ref }}
+        release_name: Release ${{ github.ref }}
+        body_path: ./release.txt
+        draft: true
+        prerelease: false
+
+    - name: Upload Release Asset
+      uses: actions/upload-release-asset@v1
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        upload_url: ${{ steps.create_release.outputs.upload_url }}
+        asset_path: ./pyflicka.tar.gz
+        asset_name: pyflicka.tar.gz
+        asset_content_type: application/gzip
